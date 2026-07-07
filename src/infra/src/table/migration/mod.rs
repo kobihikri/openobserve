@@ -128,6 +128,7 @@ mod m20260624_000001_create_synthetics_monitors;
 mod m20260624_000002_create_synthetics_jobs;
 mod m20260626_000001_create_synthetics_probe_tokens;
 mod m20260706_000001_create_synthetics_runs;
+mod m20260707_000001_add_fk_synthetics_runs_monitor;
 
 pub struct Migrator;
 
@@ -245,6 +246,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260706_000001_create_synthetics_runs::Migration),
             Box::new(m20260624_000002_create_synthetics_jobs::Migration),
             Box::new(m20260626_000001_create_synthetics_probe_tokens::Migration),
+            Box::new(m20260707_000001_add_fk_synthetics_runs_monitor::Migration),
         ]
     }
 }
