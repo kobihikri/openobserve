@@ -59,11 +59,13 @@ export interface SyntheticKpi {
 
 export interface SyntheticRun {
   timestamp: number;
+  scheduledTs: number;
   status: RunStatus;
   durationMs: number;
   location: string;
   device: string;
   browserEngine: string;
+  triggerType: string;
   error: string;
   jobId: string;
   runId: string;
@@ -285,7 +287,7 @@ ORDER BY ts`;
 /** Most-recent runs for the Runs table. */
 export function buildRunsSql(monitorId: string, limit: number): string {
   const id = escapeSqlLiteral(monitorId);
-  return `SELECT ${F.timestamp} as ts, ${F.status} as status, ${F.duration} as duration, ${F.location} as location, ${F.device} as device, ${F.engine} as engine, ${F.error} as error, job_id, run_id
+  return `SELECT ${F.timestamp} as ts, scheduled_ts, ${F.status} as status, ${F.duration} as duration, ${F.location} as location, ${F.device} as device, ${F.engine} as engine, trigger_type, ${F.error} as error, job_id, run_id
 FROM ${TABLE}
 WHERE ${F.monitorId} = '${id}'
 ORDER BY ${F.timestamp} DESC
@@ -325,11 +327,13 @@ export function mapKpi(
 export function mapRun(rawHit: Record<string, unknown>): SyntheticRun {
   return {
     timestamp: num(rawHit.ts) / 1000,
+    scheduledTs: num(rawHit.scheduled_ts) / 1000,
     status: toRunStatus(rawHit.status),
     durationMs: num(rawHit.duration),
     location: str(rawHit.location),
     device: str(rawHit.device),
     browserEngine: str(rawHit.engine),
+    triggerType: str(rawHit.trigger_type) || "schedule",
     error: str(rawHit.error),
     jobId: str(rawHit.job_id),
     runId: str(rawHit.run_id),

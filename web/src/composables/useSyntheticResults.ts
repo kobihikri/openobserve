@@ -67,14 +67,16 @@ export function useSyntheticResults() {
     try {
       const safe = (p: Promise<any[]>) => p.catch(() => [] as any[]);
       const interval = bucketInterval(endTime - startTime);
-      const [kpiRows, lastRunRows, histogramRows] = await Promise.all([
+      const [kpiRows, lastRunRows, histogramRows, runsRows] = await Promise.all([
         safe(executeQuery(buildKpiSql(monitorId), startTime, endTime, "logs")),
         safe(executeQuery(buildLastRunSql(monitorId), startTime, endTime, "logs")),
         safe(executeQuery(buildHistogramSql(monitorId, interval), startTime, endTime, "logs")),
+        safe(executeQuery(buildRunsSql(monitorId, 500), startTime, endTime, "logs")),
       ]);
 
       kpi.value = mapKpi(kpiRows[0] ?? null, lastRunRows[0] ?? null);
       buckets.value = mapHistogram(histogramRows, startTime, endTime);
+      runs.value = runsRows.map(mapRun);
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : "Failed to load results";
       kpi.value = { ...EMPTY_KPI };
