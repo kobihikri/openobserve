@@ -21,12 +21,15 @@ import {
   buildKpiSql,
   buildLastRunSql,
   buildRunsSql,
+  buildRunDetailSql,
   mapHistogram,
   mapKpi,
   mapRun,
+  mapRunDetail,
   type SyntheticBucket,
   type SyntheticKpi,
   type SyntheticRun,
+  type SyntheticRunDetail,
 } from "@/composables/synthetics/syntheticResultsSchema";
 
 const EMPTY_KPI: SyntheticKpi = {
@@ -52,6 +55,7 @@ export function useSyntheticResults() {
   const kpi = ref<SyntheticKpi>({ ...EMPTY_KPI });
   const buckets = ref<SyntheticBucket[]>([]);
   const runs = ref<SyntheticRun[]>([]);
+  const runDetail = ref<SyntheticRunDetail | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
   const hasLoadedOnce = ref(false);
@@ -97,14 +101,45 @@ export function useSyntheticResults() {
     }
   }
 
+  async function fetchRun(
+    monitorId: string,
+    runId: string,
+    startTime: number,
+    endTime: number,
+  ): Promise<void> {
+    if (!monitorId || !runId) return;
+    loading.value = true;
+    error.value = null;
+    runDetail.value = null;
+    try {
+      const rows = await executeQuery(
+        buildRunDetailSql(monitorId, runId),
+        startTime,
+        endTime,
+        "logs",
+      );
+      if (rows.length > 0) {
+        runDetail.value = mapRunDetail(rows[0]);
+      }
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : "Failed to load run";
+      runDetail.value = null;
+    } finally {
+      loading.value = false;
+      hasLoadedOnce.value = true;
+    }
+  }
+
   return {
     kpi,
     buckets,
     runs,
+    runDetail,
     loading,
     error,
     hasLoadedOnce,
     fetchAll,
+    fetchRun,
     cancelAll,
   };
 }
