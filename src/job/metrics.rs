@@ -276,5 +276,16 @@ async fn update_parquet_metadata_cache_metrics() -> Result<(), anyhow::Error> {
     metrics::QUERY_PARQUET_METADATA_CACHE_USED_BYTES
         .with_label_values::<&str>(&[])
         .set(mem_size as i64);
+
+    let file_num =
+        crate::service::search::datafusion::storage::file_metadata_cache::GLOBAL_CACHE.len();
+    let mem_size = crate::service::search::datafusion::storage::file_metadata_cache::GLOBAL_CACHE
+        .memory_size();
+    metrics::QUERY_PARQUET_FILE_METADATA_CACHE_FILES
+        .with_label_values::<&str>(&[])
+        .set(file_num as i64);
+    metrics::QUERY_PARQUET_FILE_METADATA_CACHE_USED_BYTES
+        .with_label_values::<&str>(&[])
+        .set(mem_size as i64);
     Ok(())
 }

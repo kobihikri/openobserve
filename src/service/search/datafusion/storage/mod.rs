@@ -16,6 +16,7 @@
 use object_store::path::Path;
 
 pub mod file_list;
+pub mod file_metadata_cache;
 pub mod file_statistics_cache;
 pub mod memory;
 pub mod wal;

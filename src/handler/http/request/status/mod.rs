@@ -87,7 +87,10 @@ use crate::{
     service::{
         db,
         search::{
-            datafusion::{storage::file_statistics_cache, udf::DEFAULT_FUNCTIONS},
+            datafusion::{
+                storage::{file_metadata_cache, file_statistics_cache},
+                udf::DEFAULT_FUNCTIONS,
+            },
             grpc::tantivy_result_cache,
         },
     },
@@ -579,10 +582,16 @@ pub async fn cache_status() -> impl IntoResponse {
 
     stats.insert(
         "DATAFUSION",
-        json::json!({"file_stat_cache": {
-            "file_num": file_statistics_cache::GLOBAL_CACHE.len(),
-            "mem_size": file_statistics_cache::GLOBAL_CACHE.memory_size()
-        }}),
+        json::json!({
+            "file_stat_cache": {
+                "file_num": file_statistics_cache::GLOBAL_CACHE.len(),
+                "mem_size": file_statistics_cache::GLOBAL_CACHE.memory_size()
+            },
+            "file_metadata_cache": {
+                "file_num": file_metadata_cache::GLOBAL_CACHE.len(),
+                "mem_size": file_metadata_cache::GLOBAL_CACHE.memory_size()
+            }
+        }),
     );
     stats.insert(
         "INVERTED_INDEX",

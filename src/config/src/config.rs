@@ -1900,6 +1900,12 @@ pub struct Limit {
     )]
     pub datafusion_file_stat_cache_max_size: usize,
     #[env_config(
+        name = "ZO_DATAFUSION_FILE_METADATA_CACHE_MAX_SIZE",
+        default = 0, // MB, default is 5% of total memory
+        help = "Maximum memory size in MB for the parquet footer (ParquetMetaData) cache. Entries include page indexes and can reach several MB per file. 0 = 5% of total memory (clamped to 100MB..2GB)."
+    )]
+    pub datafusion_file_metadata_cache_max_size: usize,
+    #[env_config(
         name = "ZO_DATAFUSION_STREAMING_AGGS_CACHE_MAX_ENTRIES",
         default = 10000,
         help = "Maximum number of entries in the streaming aggs cache. Higher values increase memory usage but may improve query performance."
@@ -3325,6 +3331,14 @@ fn check_memory_config(cfg: &mut Config) -> Result<(), anyhow::Error> {
                 * (SIZE_IN_MB as usize);
     } else {
         cfg.limit.datafusion_file_stat_cache_max_size *= SIZE_IN_MB as usize;
+    }
+
+    if cfg.limit.datafusion_file_metadata_cache_max_size == 0 {
+        cfg.limit.datafusion_file_metadata_cache_max_size =
+            ((cfg.limit.mem_total as f64 / SIZE_IN_MB * 0.05) as usize).clamp(100, 2048)
+                * (SIZE_IN_MB as usize);
+    } else {
+        cfg.limit.datafusion_file_metadata_cache_max_size *= SIZE_IN_MB as usize;
     }
     Ok(())
 }

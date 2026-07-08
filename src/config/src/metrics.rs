@@ -473,6 +473,83 @@ pub static QUERY_METRICS_CACHE_RATIO: Lazy<HistogramVec> = Lazy::new(|| {
 });
 
 // query parquet metadata cache stats
+pub static QUERY_PARQUET_FILE_METADATA_CACHE_FILES: Lazy<IntGaugeVec> = Lazy::new(|| {
+    IntGaugeVec::new(
+        Opts::new(
+            "query_parquet_file_metadata_cache_files",
+            "Querier parquet footer (ParquetMetaData) cache files.".to_owned() + HELP_SUFFIX,
+        )
+        .namespace(NAMESPACE)
+        .const_labels(create_const_labels()),
+        &[],
+    )
+    .expect("Metric created")
+});
+pub static QUERY_PARQUET_FILE_METADATA_CACHE_USED_BYTES: Lazy<IntGaugeVec> = Lazy::new(|| {
+    IntGaugeVec::new(
+        Opts::new(
+            "query_parquet_file_metadata_cache_used_bytes",
+            "Querier parquet footer (ParquetMetaData) cache used bytes.".to_owned() + HELP_SUFFIX,
+        )
+        .namespace(NAMESPACE)
+        .const_labels(create_const_labels()),
+        &[],
+    )
+    .expect("Metric created")
+});
+pub static QUERY_PARQUET_FILE_METADATA_CACHE_HITS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    IntCounterVec::new(
+        Opts::new(
+            "query_parquet_file_metadata_cache_hits_total",
+            "Querier parquet footer (ParquetMetaData) cache hits.".to_owned() + HELP_SUFFIX,
+        )
+        .namespace(NAMESPACE)
+        .const_labels(create_const_labels()),
+        &[],
+    )
+    .expect("Metric created")
+});
+pub static QUERY_PARQUET_FILE_METADATA_CACHE_MISS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
+    IntCounterVec::new(
+        Opts::new(
+            "query_parquet_file_metadata_cache_miss_total",
+            "Querier parquet footer (ParquetMetaData) cache misses.".to_owned() + HELP_SUFFIX,
+        )
+        .namespace(NAMESPACE)
+        .const_labels(create_const_labels()),
+        &[],
+    )
+    .expect("Metric created")
+});
+pub static QUERY_PARQUET_FILE_METADATA_CACHE_GC_COUNT: Lazy<IntCounterVec> = Lazy::new(|| {
+    IntCounterVec::new(
+        Opts::new(
+            "query_parquet_file_metadata_cache_gc_count",
+            "Querier parquet footer (ParquetMetaData) cache eviction runs.".to_owned()
+                + HELP_SUFFIX,
+        )
+        .namespace(NAMESPACE)
+        .const_labels(create_const_labels()),
+        &[],
+    )
+    .expect("Metric created")
+});
+pub static QUERY_PARQUET_FILE_METADATA_CACHE_GC_TIME: Lazy<HistogramVec> = Lazy::new(|| {
+    HistogramVec::new(
+        HistogramOpts::new(
+            "query_parquet_file_metadata_cache_gc_time",
+            "Time (ms) spent per eviction run of the querier parquet footer cache.".to_owned()
+                + HELP_SUFFIX,
+        )
+        .namespace(NAMESPACE)
+        .buckets(vec![
+            0.2, 0.5, 1.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0,
+        ])
+        .const_labels(create_const_labels()),
+        &[],
+    )
+    .expect("Metric created")
+});
 pub static QUERY_PARQUET_METADATA_CACHE_FILES: Lazy<IntGaugeVec> = Lazy::new(|| {
     IntGaugeVec::new(
         Opts::new(
@@ -1938,6 +2015,30 @@ fn register_metrics(registry: &Registry) {
         .expect("Metric registered");
     registry
         .register(Box::new(QUERY_METRICS_CACHE_RATIO.clone()))
+        .expect("Metric registered");
+    registry
+        .register(Box::new(QUERY_PARQUET_FILE_METADATA_CACHE_FILES.clone()))
+        .expect("Metric registered");
+    registry
+        .register(Box::new(
+            QUERY_PARQUET_FILE_METADATA_CACHE_USED_BYTES.clone(),
+        ))
+        .expect("Metric registered");
+    registry
+        .register(Box::new(
+            QUERY_PARQUET_FILE_METADATA_CACHE_HITS_TOTAL.clone(),
+        ))
+        .expect("Metric registered");
+    registry
+        .register(Box::new(
+            QUERY_PARQUET_FILE_METADATA_CACHE_MISS_TOTAL.clone(),
+        ))
+        .expect("Metric registered");
+    registry
+        .register(Box::new(QUERY_PARQUET_FILE_METADATA_CACHE_GC_COUNT.clone()))
+        .expect("Metric registered");
+    registry
+        .register(Box::new(QUERY_PARQUET_FILE_METADATA_CACHE_GC_TIME.clone()))
         .expect("Metric registered");
     registry
         .register(Box::new(QUERY_PARQUET_METADATA_CACHE_FILES.clone()))

@@ -61,7 +61,7 @@ use super::{
 };
 use crate::service::search::{
     datafusion::{
-        storage::file_statistics_cache,
+        storage::{file_metadata_cache, file_statistics_cache},
         table_provider::{listing_adapter::ListingTableAdapter, uniontable::NewUnionTable},
     },
     index::IndexCondition,
@@ -150,13 +150,22 @@ pub async fn create_runtime_env(trace_id: &str, memory_limit: usize) -> Result<R
     let cfg = get_config();
     let mut builder =
         RuntimeEnvBuilder::new().with_object_store_registry(Arc::new(object_store_registry));
+    let mut cache_config = CacheManagerConfig::default();
     if cfg.limit.datafusion_file_stat_cache_max_size > 0 {
-        let cache_config = CacheManagerConfig::default();
-        let cache_config = cache_config
+        cache_config = cache_config
             .with_file_statistics_cache(Some(file_statistics_cache::GLOBAL_CACHE.clone()))
             .with_file_statistics_cache_limit(cfg.limit.datafusion_file_stat_cache_max_size);
-        builder = builder.with_cache_manager(cache_config);
     }
+    // Process-wide parquet footer (ParquetMetaData) cache: DataFusion's
+    // CachedParquetFileReaderFactory consults it before fetching/decoding a
+    // file's footer, so scans of already-seen files skip the footer range
+    // reads and the thrift decode entirely.
+    if cfg.limit.datafusion_file_metadata_cache_max_size > 0 {
+        cache_config = cache_config
+            .with_file_metadata_cache(Some(file_metadata_cache::GLOBAL_CACHE.clone()))
+            .with_metadata_cache_limit(cfg.limit.datafusion_file_metadata_cache_max_size);
+    }
+    builder = builder.with_cache_manager(cache_config);
 
     let memory_size = std::cmp::max(DATAFUSION_MIN_MEM, memory_limit);
     let mem_pool = super::MemoryPoolType::from_str(&cfg.memory_cache.datafusion_memory_pool)
