@@ -15,14 +15,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -->
 
 <template>
-  <div class="tw:rounded-md tw:flex tw:flex-col tw:h-full tw:p-0">
+  <div class="rounded-md flex flex-col h-full p-0">
     <template v-if="!showImportRegexPatternDialog">
     <!-- Standard section header: title + actions only. Search moved to toolbar. -->
     <AppPageHeader
       :title="t('regex_patterns.title')"
       icon="pattern"
       :subtitle="'Reusable regex patterns for redaction'"
-      class="tw:shrink-0 tw:px-4 tw:border-b tw:border-border-default"
+      class="shrink-0 px-4 border-b border-border-default"
     >
       <template #actions>
         <OButton
@@ -39,7 +39,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
         >{{ t("regex_patterns.create_pattern") }}</OButton>
       </template>
     </AppPageHeader>
-    <div class="card-container tw:flex-1 tw:min-h-0 tw:overflow-hidden">
+    <div class="card-container flex-1 min-h-0 overflow-hidden">
     <OTable
       :frame="false"
       data-test="regex-pattern-list-table"
@@ -64,21 +64,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
       <template #toolbar>
         <OSearchInput
           v-model="filterQuery"
-          class="tw:flex-1"
+          class="flex-1"
           :placeholder="t('regex_patterns.search')"
         />
       </template>
       <template #empty>
-        <div v-if="!listLoading && filterQuery == ''">
-          <NoRegexPatterns @create-new-regex-pattern="createRegexPattern" @import-regex-pattern="importRegexPattern" />
-        </div>
         <OEmptyState
-          v-else-if="!listLoading && filterQuery != ''"
+          v-if="!listLoading"
           size="hero"
-          filtered
-          :title="t('emptyState.filtered.title', { noun: t('regex_patterns.header').toLowerCase() })"
-          :description="t('emptyState.filtered.description', { noun: t('regex_patterns.header').toLowerCase() })"
-          @action="(id) => id === 'clear-filters' && (filterQuery = '')"
+          preset="no-regex-patterns"
+          :filtered="filterQuery !== ''"
+          @action="(id) => id === 'clear-filters' ? (filterQuery = '') : id === 'import' ? importRegexPattern() : createRegexPattern()"
         />
       </template>
       <template #cell-pattern="{ row }">
@@ -91,9 +87,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
         <OTimeCell :value="row.updated_at" unit="iso" :timezone="store.state.timezone" />
       </template>
       <template #cell-actions="{ row }">
-        <div class="tw:flex tw:items-center tw:gap-1 tw:justify-center">
+        <div class="flex items-center gap-1 justify-center">
           <OButton
             :data-test="`regex-pattern-list-${row.id}-export-regex-pattern`"
+            data-row-action="export"
             variant="ghost"
             size="icon-sm"
             title="Export Regex Pattern"
@@ -102,6 +99,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
           />
           <OButton
             :data-test="`regex-pattern-list-${row.id}-update-regex-pattern`"
+            data-row-action="edit"
             variant="ghost"
             size="icon-sm"
             :title="t('regex_patterns.edit')"
@@ -110,6 +108,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
           />
           <OButton
             :data-test="`regex-pattern-list-${row.id}-delete-regex-pattern`"
+            data-row-action="delete"
             variant="ghost-destructive"
             size="icon-sm"
             :title="t('regex_patterns.delete')"
@@ -119,8 +118,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
         </div>
       </template>
       <template #bottom>
-        <div class="tw:flex tw:items-center tw:gap-2">
-          <span class="tw:text-xs tw:text-text-primary tw:font-medium">
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-text-primary font-medium">
             {{ resultTotal }} {{ t("regex_patterns.bottom_header") }}
           </span>
           <OButton
@@ -178,7 +177,6 @@ import { convertUnixToQuasarFormat } from "@/utils/zincutils";
 import ConfirmDialog from "../ConfirmDialog.vue";
 import { useRouter } from "vue-router";
 import { useStore } from "vuex";
-import NoRegexPatterns from "./NoRegexPatterns.vue";
 import regexPatternsService from "@/services/regex_pattern";
 import AddRegexPattern from "./AddRegexPattern.vue";
 import ImportRegexPattern from "./ImportRegexPattern.vue";
@@ -198,7 +196,6 @@ export default defineComponent({
   name: "RegexPatternList",
   components: {
     AppPageHeader,
-    NoRegexPatterns,
     ConfirmDialog,
     AddRegexPattern,
     ImportRegexPattern,
@@ -549,13 +546,3 @@ export default defineComponent({
   },
 });
 </script>
-
-<style lang="scss">
-.o2-table-cell-content {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-  display: block;
-}
-</style>

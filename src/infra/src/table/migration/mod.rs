@@ -127,6 +127,7 @@ mod m20260622_000001_add_org_id_to_short_urls;
 mod m20260624_000001_create_synthetics_monitors;
 mod m20260624_000002_create_synthetics_jobs;
 mod m20260626_000001_create_synthetics_probe_tokens;
+mod m20260629_000001_create_gen_ai_agents_table;
 mod m20260706_000001_create_synthetics_runs;
 
 pub struct Migrator;
@@ -245,6 +246,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260706_000001_create_synthetics_runs::Migration),
             Box::new(m20260624_000002_create_synthetics_jobs::Migration),
             Box::new(m20260626_000001_create_synthetics_probe_tokens::Migration),
+            Box::new(m20260629_000001_create_gen_ai_agents_table::Migration),
         ]
     }
 }

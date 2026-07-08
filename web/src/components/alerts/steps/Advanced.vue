@@ -16,41 +16,51 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 <template>
   <div
-    class="step-advanced"
+    class="step-advanced w-full"
     :class="store.state.theme === 'dark' ? 'dark-mode' : 'light-mode'"
   >
-    <div class="step-content card-container">
+    <div
+      class="step-content rounded-lg bg-[var(--color-surface-overlay)] border border-[var(--color-border-default)]"
+    >
       <!-- Section header -->
-      <div class="section-header">
-        <div class="section-header-accent" />
-        <span class="section-header-title">{{
+      <div
+        class="section-header flex items-center py-[10px] px-3"
+        :class="store.state.theme === 'dark' ? 'border-b border-[#343434]' : 'border-b border-[#eeeeee]'"
+      >
+        <div class="section-header-accent w-[3px] h-4 rounded-[2px] mr-2 shrink-0 bg-[var(--q-primary)]" />
+        <span
+          class="section-header-title text-[13px] font-semibold text-[var(--color-text-primary)]"
+        >{{
           t("alerts.additional_settings") || "Additional Settings"
         }}</span>
       </div>
 
-      <div class="tw:px-3 tw:py-3 tw:flex tw:flex-col tw:gap-4">
+      <div class="px-3 py-3 flex flex-col gap-4">
         <!-- Template Override -->
         <div>
-          <div class="subsection-label tw:mb-2">
+          <div
+            class="subsection-label flex items-center text-xs font-semibold mb-2"
+            :class="store.state.theme === 'dark' ? 'text-[#9ca3af]' : 'text-[#6b7280]'"
+          >
             <span>{{ t("alerts.template") }}</span>
             <OButton
               data-test="advanced-template-info-btn"
               variant="ghost-primary"
               size="xs"
-              class="help-learn-more"
+              class="gap-1 font-medium"
               @click="openHelp('template')"
             >
               <OIcon name="help" size="xs" />
               <span>{{ t("alerts.alertSettings.helpLearnMore") }}</span>
             </OButton>
           </div>
-          <div class="tw:flex tw:items-center tw:gap-2">
+          <div class="flex items-center gap-2">
             <OSelect
               v-model="localTemplate"
               :options="formattedTemplates"
               clearable
               :placeholder="t('alerts.advanced.selectTemplate')"
-              class="tw:min-w-[240px] tw:max-w-[300px]"
+              class="min-w-[240px] max-w-[300px]"
               data-test="advanced-template-override-select"
               @update:model-value="emitTemplateUpdate"
             >
@@ -69,13 +79,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
         <!-- Context Variables -->
         <div>
-          <div class="subsection-label tw:mb-2">
+          <div
+            class="subsection-label flex items-center text-xs font-semibold mb-2"
+            :class="store.state.theme === 'dark' ? 'text-[#9ca3af]' : 'text-[#6b7280]'"
+          >
             <span>{{ t("alerts.additionalVariables") }}</span>
             <OButton
               data-test="advanced-variables-info-btn"
               variant="ghost-primary"
               size="xs"
-              class="help-learn-more"
+              class="gap-1 font-medium"
               @click="openHelp('variables')"
             >
               <OIcon name="help" size="xs" />
@@ -96,21 +109,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
             <div
               v-for="(variable, index) in localVariables"
               :key="variable.id"
-              class="tw:flex tw:items-center tw:gap-2 tw:mb-2"
+              class="flex items-center gap-2 mb-2"
               :data-test="`alert-variables-${index + 1}`"
             >
               <OInput
                 data-test="alert-variables-key-input"
                 v-model="variable.key"
                 :placeholder="t('common.name')"
-                class="tw:min-w-[140px]"
+                class="min-w-[140px]"
                 @update:model-value="emitUpdate"
               />
               <OInput
                 data-test="alert-variables-value-input"
                 v-model="variable.value"
                 :placeholder="t('common.value')"
-                class="tw:min-w-[200px]"
+                class="min-w-[200px]"
                 @update:model-value="emitUpdate"
               />
               <OButton
@@ -136,7 +149,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
         <!-- Description -->
         <div>
-          <div class="subsection-label tw:mb-2">
+          <div
+            class="subsection-label flex items-center text-xs font-semibold mb-2"
+            :class="store.state.theme === 'dark' ? 'text-[#9ca3af]' : 'text-[#6b7280]'"
+          >
             <span>{{ t("alerts.description") }}</span>
           </div>
           <OTextarea
@@ -149,22 +165,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
         <!-- Row Template -->
         <div>
-          <div class="tw:flex tw:items-center tw:justify-between tw:mb-2">
-            <div class="subsection-label">
+          <div class="flex items-center justify-between mb-2">
+            <div
+              class="subsection-label flex items-center text-xs font-semibold"
+              :class="store.state.theme === 'dark' ? 'text-[#9ca3af]' : 'text-[#6b7280]'"
+            >
               <span>{{ t("alerts.row") }}</span>
               <OButton
                 data-test="add-alert-row-input-info-btn"
                 variant="ghost-primary"
                 size="xs"
-                class="help-learn-more"
+                class="gap-1 font-medium"
                 @click="openHelp('rowTemplate')"
               >
                 <OIcon name="help" size="xs" />
                 <span>{{ t("alerts.alertSettings.helpLearnMore") }}</span>
               </OButton>
             </div>
-            <div class="tw:flex tw:items-center tw:gap-2">
-              <span class="tw:text-xs tw:opacity-60">{{
+            <div class="flex items-center gap-2">
+              <span class="text-xs opacity-60">{{
                 t("alerts.advanced.templateType")
               }}</span>
               <OToggleGroup
@@ -460,85 +479,3 @@ export default defineComponent({
   },
 });
 </script>
-
-<style scoped lang="scss">
-.step-advanced {
-  width: 100%;
-
-  .step-content {
-    border-radius: 8px;
-  }
-
-  &.dark-mode {
-    .step-content {
-      background-color: #212121;
-      border: 1px solid #343434;
-    }
-    .section-header {
-      border-bottom: 1px solid #343434;
-    }
-    .section-header-title {
-      color: #e0e0e0;
-    }
-    .section-header-accent {
-      background: var(--q-primary);
-    }
-    .subsection-label {
-      color: #9ca3af;
-    }
-  }
-
-  &.light-mode {
-    .step-content {
-      background-color: #ffffff;
-      border: 1px solid #e6e6e6;
-    }
-    .section-header {
-      border-bottom: 1px solid #eeeeee;
-    }
-    .section-header-title {
-      color: #374151;
-    }
-    .section-header-accent {
-      background: var(--q-primary);
-    }
-    .subsection-label {
-      color: #6b7280;
-    }
-  }
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  padding: 10px 12px;
-}
-.section-header-accent {
-  width: 3px;
-  height: 16px;
-  border-radius: 2px;
-  margin-right: 8px;
-  flex-shrink: 0;
-}
-.section-header-title {
-  font-size: 13px;
-  font-weight: 600;
-}
-.subsection-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-// "Learn more" help trigger — a clear, labeled, clickable affordance that
-// opens the help drawer. Distinct from passive info tooltips elsewhere, so
-// the click action is never ambiguous. Tighten the icon/label gap.
-.help-learn-more {
-  gap: 0.25rem;
-  font-weight: 500;
-}
-
-
-</style>

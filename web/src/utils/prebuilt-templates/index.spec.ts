@@ -21,6 +21,7 @@ import {
   detectPrebuiltTypeFromUrl,
   generateDestinationUrl,
   generateDestinationHeaders,
+  generatePrebuiltMetadata,
   getPopularPrebuiltTypes,
   getPrebuiltTypesByCategory
 } from '@/utils/prebuilt-templates';
@@ -129,6 +130,9 @@ describe('Prebuilt Templates Index', () => {
 
       const teamsUrl2 = 'https://webhook.office.com/webhookb2/abc';
       expect(detectPrebuiltTypeFromUrl(teamsUrl2)).toBe('msteams');
+
+      const teamsWorkflowUrl = 'https://prod-10.westus.logic.azure.com/workflows/abc/triggerS/manual/paths/invoke?api-version=2016-06-01&sig=xyz';
+      expect(detectPrebuiltTypeFromUrl(teamsWorkflowUrl)).toBe('msteams');
     });
 
     it('should detect PagerDuty URLs', () => {
@@ -224,8 +228,9 @@ describe('Prebuilt Templates Index', () => {
       const credentials = { integrationKey: 'test-integration-key-12345678' };
       const headers = generateDestinationHeaders('pagerduty', credentials);
 
-      expect(headers).toHaveProperty('X-Routing-Key');
-      expect(headers['X-Routing-Key']).toBe('test-integration-key-12345678');
+      // PagerDuty Events API v2 reads the integration key from the request body
+      // (routing_key), not from a header — so no routing header is emitted.
+      expect(headers).not.toHaveProperty('X-Routing-Key');
       expect(headers['Content-Type']).toBe('application/json');
     });
 
@@ -247,6 +252,29 @@ describe('Prebuilt Templates Index', () => {
       const headers2 = generateDestinationHeaders('opsgenie', { apiKey: 'different-key' });
 
       expect(headers1.Authorization).not.toBe(headers2.Authorization);
+    });
+  });
+
+  describe('generatePrebuiltMetadata', () => {
+    it('should map PagerDuty credentials to body template variables', () => {
+      const credentials = { integrationKey: 'test-integration-key-12345678', severity: 'critical' };
+      const metadata = generatePrebuiltMetadata('pagerduty', credentials);
+
+      // routing_key carries the integration key into the request body.
+      expect(metadata.routing_key).toBe('test-integration-key-12345678');
+      expect(metadata.severity).toBe('critical');
+      expect(metadata.source).toBe('openobserve');
+    });
+
+    it('should still set a source for PagerDuty without credentials', () => {
+      const metadata = generatePrebuiltMetadata('pagerduty', {});
+      expect(metadata.source).toBe('openobserve');
+      expect(metadata).not.toHaveProperty('routing_key');
+    });
+
+    it('should return empty metadata for types without body variables', () => {
+      expect(generatePrebuiltMetadata('slack', { webhookUrl: 'https://x' })).toEqual({});
+      expect(generatePrebuiltMetadata('unknown', {})).toEqual({});
     });
   });
 
