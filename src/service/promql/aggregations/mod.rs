@@ -289,6 +289,17 @@ where
         results.len()
     );
 
+    // Free high-cardinality per-series allocations on the Rayon pool. Letting
+    // these values fall out of scope here drops millions of labels, samples,
+    // and their backing allocations on a single thread.
+    let start4 = std::time::Instant::now();
+    matrix.into_par_iter().for_each(drop);
+    series_label_hashes.into_par_iter().for_each(drop);
+    log::info!(
+        "[trace_id: {trace_id}] [PromQL Timing] eval_aggregate({func_name}) parallel drop took: {:?}",
+        start4.elapsed()
+    );
+
     Ok(Value::Matrix(results))
 }
 

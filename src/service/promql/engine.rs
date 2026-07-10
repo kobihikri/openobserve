@@ -63,6 +63,7 @@ use crate::service::search::SEARCH_SERVER;
 type TokioResult = tokio::task::JoinHandle<Result<(HashMap<u64, Vec<Sample>>, HashSet<i64>)>>;
 type TokioExemplarsResult =
     tokio::task::JoinHandle<Result<(HashMap<u64, Vec<Arc<Exemplar>>>, HashSet<i64>)>>;
+type TokioLabelsResult = tokio::task::JoinHandle<Result<HashMap<u64, Vec<Arc<Label>>>>>;
 
 // Constants for optimization thresholds
 const OPTIMIZATION_STEP_LOOKBACK_MULTIPLIER: i64 = 5;
@@ -1385,7 +1386,7 @@ async fn selector_load_data_from_datafusion(
 
     // get series
     let start2 = std::time::Instant::now();
-    let series =
+    let series_df =
         if config::get_config().limit.metrics_inlist_filter_enabled || timestamp_set.is_empty() {
             df_group
                 .clone()
@@ -1394,8 +1395,6 @@ async fn selector_load_data_from_datafusion(
                     false,
                 ))?
                 .select(label_cols)?
-                .collect()
-                .await?
         } else {
             let min = timestamp_set.iter().min().unwrap();
             let max = timestamp_set.iter().max().unwrap();
@@ -1403,103 +1402,22 @@ async fn selector_load_data_from_datafusion(
                 .clone()
                 .filter(col(TIMESTAMP_COL_NAME).between(lit(*min), lit(*max)))?
                 .select(label_cols)?
-                .collect()
-                .await?
         };
 
+    load_labels_from_datafusion(
+        &query_ctx.trace_id,
+        hash_field_type,
+        series_df,
+        query_ctx.query_data,
+        &mut metrics,
+    )
+    .await?;
+
     log::info!(
-        "[trace_id: {}] load all labels took: {:?}",
+        "[trace_id: {}] load and process all labels took: {:?}",
         query_ctx.trace_id,
         start2.elapsed()
     );
-
-    let mut labels = Vec::new();
-    let mut hash_label_set: HashSet<u64> = HashSet::with_capacity(metrics.len());
-    for batch in series {
-        let columns = batch.columns();
-        let schema = batch.schema();
-        let fields = schema.fields();
-        let cols = fields
-            .iter()
-            .zip(columns)
-            .filter_map(|(field, col)| {
-                if field.name() == HASH_LABEL {
-                    None
-                } else {
-                    col.as_any()
-                        .downcast_ref::<StringArray>()
-                        .map(|col| (field.name(), col))
-                }
-            })
-            .collect::<Vec<(_, _)>>();
-        if hash_field_type == &DataType::UInt64 {
-            let hash_values = batch
-                .column_by_name(HASH_LABEL)
-                .unwrap()
-                .as_any()
-                .downcast_ref::<UInt64Array>()
-                .unwrap();
-            for i in 0..batch.num_rows() {
-                let hash = hash_values.value(i);
-                if hash_label_set.contains(&hash) {
-                    continue;
-                }
-                labels.clear(); // reset and reuse the same vector
-                if query_ctx.query_data {
-                    labels.push(Arc::new(Label {
-                        name: HASH_LABEL.to_string(),
-                        value: hash.to_string(),
-                    }));
-                }
-                for (name, value) in cols.iter() {
-                    if value.is_null(i) {
-                        continue;
-                    }
-                    labels.push(Arc::new(Label {
-                        name: name.to_string(),
-                        value: value.value(i).to_string(),
-                    }));
-                }
-                hash_label_set.insert(hash);
-                if let Some(range_val) = metrics.get_mut(&hash) {
-                    range_val.labels = labels.clone();
-                }
-            }
-        } else {
-            let hash_values = batch
-                .column_by_name(HASH_LABEL)
-                .unwrap()
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .unwrap();
-            for i in 0..batch.num_rows() {
-                let hash: u64 = gxhash::new().sum64(hash_values.value(i));
-                if hash_label_set.contains(&hash) {
-                    continue;
-                }
-                labels.clear(); // reset and reuse the same vector
-                if query_ctx.query_data {
-                    labels.push(Arc::new(Label {
-                        name: HASH_LABEL.to_string(),
-                        value: hash.to_string(),
-                    }));
-                }
-                for (name, value) in cols.iter() {
-                    if value.is_null(i) {
-                        continue;
-                    }
-                    labels.push(Arc::new(Label {
-                        name: name.to_string(),
-                        value: value.value(i).to_string(),
-                    }));
-                }
-                hash_label_set.insert(hash);
-                if let Some(range_val) = metrics.get_mut(&hash) {
-                    range_val.labels = labels.clone();
-                }
-            }
-        }
-    }
 
     log::info!(
         "[trace_id: {}] load data from datafusion took: {:?}",
@@ -1508,6 +1426,137 @@ async fn selector_load_data_from_datafusion(
     );
 
     Ok(metrics)
+}
+
+async fn load_labels_from_datafusion(
+    trace_id: &str,
+    hash_field_type: &DataType,
+    df: DataFrame,
+    include_hash_label: bool,
+    metrics: &mut HashMap<u64, RangeValue>,
+) -> Result<()> {
+    let ctx = Arc::new(df.task_ctx());
+    let target_partitions = ctx.session_config().target_partitions();
+    let plan = df.create_physical_plan().await?;
+    let schema = plan.schema();
+    let plan = Arc::new(RepartitionExec::try_new(
+        plan,
+        Partitioning::Hash(
+            vec![Arc::new(Column::new_with_schema(HASH_LABEL, &schema)?)],
+            target_partitions,
+        ),
+    )?);
+
+    if config::get_config().common.print_key_sql {
+        log::info!(
+            "{}",
+            config::meta::plan::generate_plan_string(trace_id, plan.as_ref())
+        );
+    }
+
+    let streams = execute_stream_partitioned(plan, ctx)?;
+    let mut tasks = Vec::with_capacity(streams.len());
+    for mut stream in streams {
+        let hash_field_type = hash_field_type.clone();
+        let task: TokioLabelsResult = tokio::task::spawn(async move {
+            let mut series: HashMap<u64, Vec<Arc<Label>>> = HashMap::new();
+            while let Some(batch) = stream.try_next().await? {
+                let columns = batch.columns();
+                let schema = batch.schema();
+                let fields = schema.fields();
+                let cols = fields
+                    .iter()
+                    .zip(columns)
+                    .filter_map(|(field, col)| {
+                        if field.name() == HASH_LABEL {
+                            None
+                        } else {
+                            col.as_any()
+                                .downcast_ref::<StringArray>()
+                                .map(|col| (field.name(), col))
+                        }
+                    })
+                    .collect::<Vec<(_, _)>>();
+
+                if hash_field_type == DataType::UInt64 {
+                    let hash_values = batch
+                        .column_by_name(HASH_LABEL)
+                        .unwrap()
+                        .as_any()
+                        .downcast_ref::<UInt64Array>()
+                        .unwrap();
+                    for i in 0..batch.num_rows() {
+                        let hash = hash_values.value(i);
+                        let hashbrown::hash_map::Entry::Vacant(entry) = series.entry(hash) else {
+                            continue;
+                        };
+                        let mut labels =
+                            Vec::with_capacity(cols.len() + usize::from(include_hash_label));
+                        if include_hash_label {
+                            labels.push(Arc::new(Label {
+                                name: HASH_LABEL.to_string(),
+                                value: hash.to_string(),
+                            }));
+                        }
+                        for (name, value) in &cols {
+                            if !value.is_null(i) {
+                                labels.push(Arc::new(Label {
+                                    name: name.to_string(),
+                                    value: value.value(i).to_string(),
+                                }));
+                            }
+                        }
+                        entry.insert(labels);
+                    }
+                } else {
+                    let hash_values = batch
+                        .column_by_name(HASH_LABEL)
+                        .unwrap()
+                        .as_any()
+                        .downcast_ref::<StringArray>()
+                        .unwrap();
+                    for i in 0..batch.num_rows() {
+                        let hash = gxhash::new().sum64(hash_values.value(i));
+                        let hashbrown::hash_map::Entry::Vacant(entry) = series.entry(hash) else {
+                            continue;
+                        };
+                        let mut labels =
+                            Vec::with_capacity(cols.len() + usize::from(include_hash_label));
+                        if include_hash_label {
+                            labels.push(Arc::new(Label {
+                                name: HASH_LABEL.to_string(),
+                                value: hash.to_string(),
+                            }));
+                        }
+                        for (name, value) in &cols {
+                            if !value.is_null(i) {
+                                labels.push(Arc::new(Label {
+                                    name: name.to_string(),
+                                    value: value.value(i).to_string(),
+                                }));
+                            }
+                        }
+                        entry.insert(labels);
+                    }
+                }
+            }
+            Ok(series)
+        });
+        tasks.push(task);
+    }
+
+    for task in tasks {
+        let labels_by_hash = task
+            .await
+            .map_err(|e| DataFusionError::Execution(e.to_string()))??;
+        for (hash, labels) in labels_by_hash {
+            if let Some(range_val) = metrics.get_mut(&hash) {
+                range_val.labels = labels;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn load_samples_from_datafusion(
@@ -1771,6 +1820,11 @@ fn get_offset_modifier(offset: Option<Offset>) -> i64 {
 mod tests {
     use std::sync::Arc;
 
+    use datafusion::arrow::{
+        array::{StringArray, UInt64Array},
+        datatypes::{Field, Schema},
+        record_batch::RecordBatch,
+    };
     use promql_parser::{
         label::{MatchOp, Matchers},
         parser::{
@@ -1781,6 +1835,77 @@ mod tests {
     };
 
     use super::*;
+
+    #[tokio::test]
+    async fn test_load_labels_from_datafusion_repartitions_and_deduplicates() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new(HASH_LABEL, DataType::UInt64, false),
+            Field::new("instance", DataType::Utf8, true),
+            Field::new("region", DataType::Utf8, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(UInt64Array::from(vec![11, 22, 11])),
+                Arc::new(StringArray::from(vec![
+                    Some("a"),
+                    Some("b"),
+                    Some("ignored"),
+                ])),
+                Arc::new(StringArray::from(vec![Some("east"), None, Some("ignored")])),
+            ],
+        )
+        .unwrap();
+        let ctx = SessionContext::new();
+        let df = ctx.read_batch(batch).unwrap();
+        let mut metrics = HashMap::from([(11, RangeValue::default()), (22, RangeValue::default())]);
+
+        load_labels_from_datafusion("test", &DataType::UInt64, df, true, &mut metrics)
+            .await
+            .unwrap();
+
+        let labels_11 = &metrics.get(&11).unwrap().labels;
+        assert_eq!(labels_11.len(), 3);
+        assert_eq!(labels_11[0].name, HASH_LABEL);
+        assert_eq!(labels_11[0].value, "11");
+        assert_eq!(labels_11[1].value, "a");
+        assert_eq!(labels_11[2].value, "east");
+
+        let labels_22 = &metrics.get(&22).unwrap().labels;
+        assert_eq!(labels_22.len(), 2);
+        assert_eq!(labels_22[1].name, "instance");
+        assert_eq!(labels_22[1].value, "b");
+    }
+
+    #[tokio::test]
+    async fn test_load_labels_from_datafusion_hashes_string_series_id() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new(HASH_LABEL, DataType::Utf8, false),
+            Field::new("instance", DataType::Utf8, false),
+        ]));
+        let series_id = "string-series-id";
+        let hash = gxhash::new().sum64(series_id);
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(StringArray::from(vec![series_id])),
+                Arc::new(StringArray::from(vec!["a"])),
+            ],
+        )
+        .unwrap();
+        let ctx = SessionContext::new();
+        let df = ctx.read_batch(batch).unwrap();
+        let mut metrics = HashMap::from([(hash, RangeValue::default())]);
+
+        load_labels_from_datafusion("test", &DataType::Utf8, df, false, &mut metrics)
+            .await
+            .unwrap();
+
+        let labels = &metrics.get(&hash).unwrap().labels;
+        assert_eq!(labels.len(), 1);
+        assert_eq!(labels[0].name, "instance");
+        assert_eq!(labels[0].value, "a");
+    }
 
     // Test extension struct for testing
     #[derive(Debug)]
